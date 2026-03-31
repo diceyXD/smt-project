@@ -3,7 +3,7 @@ from src.dataset import load_comtrans_data
 from src.smt_model import StatisticalMT
 
 print("Loading data...")
-data = load_comtrans_data(num_sentences=3000) # Increased to 3000 for better quality since we are saving it ahead of time
+data = load_comtrans_data(num_sentences=20000) # Increased to 20,000 to drastically improve SMT vocabulary coverage and translation accuracy
 
 print("Initializing models...")
 model_en2de = StatisticalMT(direction="en2de")
