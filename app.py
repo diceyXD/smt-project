@@ -83,12 +83,3 @@ if "translation" in st.session_state:
         
         # Display score nicely
         st.metric(label="BLEU Score", value=f"{score:.4f}")
-        
-        # Error context expander
-        with st.expander("Why did it get this score? (Qualitative Error Analysis)", expanded=True):
-            st.markdown("""
-            **Understanding the Errors (IBM Model 1 Limitations):**
-            * **Grammar & Word Order (Distortion):** This model uses NLTK's IBM Model 1, which translates word-by-word but mathematically ignores grammar (e.g., German verbs moving to the end of the sentence). If the words are correct but their order is wrong, the BLEU score will be radically lower because BLEU checks contiguous sequence matches (n-grams).
-            * **Unknown Words (Sparsity):** If an inputted word wasn't explicitly represented in our 20,000-sentence Europarl training corpus, the model acts as a direct pass-through, resulting in English words trapped inside German outputs.
-            * **Literal Translation:** NLTK IBM Model 1 computes probabilities strictly at the lexical (word) level, overwhelmingly resulting in rigid, overly-literal translations rather than fluid, natural idiomatic phrasing. Truly fluid models require IBM Model 3's distortion mathematics and Beam Search decoding!
-            """)
