@@ -1,8 +1,8 @@
 import streamlit as st
 import time
 import os
+import pickle
 
-from src.dataset import load_comtrans_data
 from src.smt_model import StatisticalMT
 from src.evaluation import evaluate_translation
 
@@ -10,22 +10,23 @@ st.set_page_config(page_title="English-German MT", layout="wide")
 
 @st.cache_resource
 def load_models():
-    # Load small subset (e.g. 2000 sentences for fast app startup)
-    data = load_comtrans_data(num_sentences=2000)
-    
+    with open("models.pkl", "rb") as f:
+        cache = pickle.load(f)
+        
     model_en2de = StatisticalMT(direction="en2de")
-    model_de2en = StatisticalMT(direction="de2en")
+    model_en2de.best_trans = cache["en2de_trans"]
+    model_en2de.phrase_memory = cache["en2de_phrase"]
     
-    model_en2de.train(data, iterations=5)
-    model_de2en.train(data, iterations=5)
+    model_de2en = StatisticalMT(direction="de2en")
+    model_de2en.best_trans = cache["de2en_trans"]
+    model_de2en.phrase_memory = cache["de2en_phrase"]
     
     return model_en2de, model_de2en
 
 st.title("Bidirectional Statistical Machine Translation")
 st.markdown("English ↔ German Phrase-Based/Statistical MT")
 
-# Show loading spinner while NLTK dataset is downloaded/trained
-with st.spinner("Training IBM Model 1 on parallel corpus... (this will take 30-60 secs on first load)"):
+with st.spinner("Loading pre-trained IBM Model 1..."):
     model_en2de, model_de2en = load_models()
 
 # UI Layout
