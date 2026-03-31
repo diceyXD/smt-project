@@ -1,12 +1,11 @@
 import streamlit as st
 import time
-import os
 import pickle
 
 from src.smt_model import StatisticalMT
 from src.evaluation import evaluate_translation
 
-st.set_page_config(page_title="English-German MT", layout="wide")
+st.set_page_config(page_title="English ↔ German MT", layout="wide")
 
 @st.cache_resource
 def load_models():
@@ -29,51 +28,67 @@ st.markdown("English ↔ German Phrase-Based/Statistical MT")
 with st.spinner("Loading pre-trained IBM Model 1..."):
     model_en2de, model_de2en = load_models()
 
-# UI Layout
-tab1, tab2 = st.tabs(["Translate", "Evaluation & Error Analysis"])
+st.markdown("---")
 
-with tab1:
-    col1, col2 = st.columns(2)
+col1, col2 = st.columns(2)
+
+with col1:
+    st.subheader("1. Input & Translate")
+    direction = st.radio("Translation Direction", ["English -> German", "German -> English"])
     
-    with col1:
-        st.subheader("Input Text")
-        direction = st.radio("Translation Direction", ["English -> German", "German -> English"])
-        
-        default_val = "The government announced a new housing scheme." if "English" in direction.split("->")[0] else "Die regierung kündigte ein neues wohnungsbauprogramm an."
-        input_text = st.text_area("Enter text to translate:", value=default_val)
-        
-        if st.button("Translate"):
-            if not input_text:
-                st.warning("Please enter text.")
+    # Default placeholder text based on direction
+    default_val = "The government announced a new housing scheme." if "English" in direction.split("->")[0] else "Die regierung kündigte ein neues wohnungsbauprogramm an."
+    input_text = st.text_area("Enter text to translate:", value=default_val)
+    
+    translate_btn = st.button("Translate", type="primary")
+
+with col2:
+    st.subheader("2. Translation Output")
+    
+    # We use session state to persist the translation across widget interactions (like clicking Evaluate later)
+    if translate_btn:
+        if not input_text:
+            st.warning("Please enter text.")
+        else:
+            start_time = time.time()
+            if direction == "English -> German":
+                st.session_state.translation = model_en2de.translate(input_text)
             else:
-                start_time = time.time()
-                
-                if direction == "English -> German":
-                    translation = model_en2de.translate(input_text)
-                else:
-                    translation = model_de2en.translate(input_text)
-                    
-                time_taken = time.time() - start_time
-                
-                with col2:
-                    st.subheader("Translation Output (SMT)")
-                    st.info(translation)
-                    st.caption(f"Translated in {time_taken:.3f} seconds.")
+                st.session_state.translation = model_de2en.translate(input_text)
+            st.session_state.time_taken = time.time() - start_time
+            
+    if "translation" in st.session_state:
+        st.info(st.session_state.translation)
+        st.caption(f"Translated in {st.session_state.time_taken:.3f} seconds.")
 
-with tab2:
-    st.header("Evaluation (BLEU Score)")
-    st.markdown("Test the translation quality against a known reference.")
+st.markdown("---")
+
+if "translation" in st.session_state:
+    st.subheader("3. Interactive Error Analysis & Evaluation")
+    st.markdown("Provide the **Ground Truth Reference** to mathematically evaluate the model's output using the **BLEU** metric.")
     
-    ref_text = st.text_input("Reference (Ground Truth):", "Die regierung kündigte ein neues wohnungsbauprogramm an.")
-    hyp_text = st.text_input("Hypothesis (Model Output):", "Die regierung kündigte ein neues.")
+    ref_col, btn_col = st.columns([4, 1])
+    with ref_col:
+        # Provide a matching default ground truth for the demo inputs
+        default_ref = "Die regierung kündigte ein neues wohnungsbauprogramm an." if "English" in direction else "The government announced a new housing scheme."
+        ref_text = st.text_input("Ground Truth Reference:", default_ref)
     
-    if st.button("Calculate BLEU"):
-        score = evaluate_translation(ref_text, hyp_text)
+    with btn_col:
+        st.write("")
+        st.write("") # Alignment padding
+        eval_btn = st.button("Evaluate Score")
+        
+    if eval_btn:
+        score = evaluate_translation(ref_text, st.session_state.translation)
+        
+        # Display score nicely
         st.metric(label="BLEU Score", value=f"{score:.4f}")
         
-    st.markdown("---")
-    st.subheader("Qualitative Analysis Notes")
-    st.markdown("""
-    * **Strengths**: Memorizes exact phrases from the training set flawlessly (Pseudo Phrase-Based). Handles simple word-to-word alignments well via IBM Model 1.
-    * **Errors**: Struggles with long-distance reordering (e.g. German verbs moving to the end). Unseen words map directly without morphological fallback. Because the vocabulary size in realistic bounds is relatively small, unknown tokens appear frequently in Out of Domain inputs.
-    """)
+        # Error context expander
+        with st.expander("Why did it get this score? (Qualitative Error Analysis)", expanded=True):
+            st.markdown("""
+            **Understanding the Errors (IBM Model 1 Limitations):**
+            * **Grammar & Word Order (Distortion):** This model uses NLTK's IBM Model 1, which translates word-by-word but mathematically ignores grammar (e.g., German verbs moving to the end of the sentence). If the words are correct but their order is wrong, the BLEU score will be radically lower because BLEU checks contiguous sequence matches (n-grams).
+            * **Unknown Words (Sparsity):** If an inputted word wasn't explicitly represented in our 20,000-sentence Europarl training corpus, the model acts as a direct pass-through, resulting in English words trapped inside German outputs.
+            * **Literal Translation:** NLTK IBM Model 1 computes probabilities strictly at the lexical (word) level, overwhelmingly resulting in rigid, overly-literal translations rather than fluid, natural idiomatic phrasing. Truly fluid models require IBM Model 3's distortion mathematics and Beam Search decoding!
+            """)
